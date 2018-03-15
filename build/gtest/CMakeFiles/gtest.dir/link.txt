@@ -1,0 +1,1 @@
+/usr/bin/c++  -fPIC  -O0 -Wall -g -ggdb  -shared -Wl,-soname,libgtest.so -o libgtest.so CMakeFiles/gtest.dir/src/gtest-all.cc.o  -L/home/cyy/projects/test_ceres/build/gtest/src -lpthread -Wl,-rpath,/home/cyy/projects/test_ceres/build/gtest/src 
