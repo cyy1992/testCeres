@@ -44,7 +44,7 @@ public:
     Eigen::Quaternion<T> base2camera_q = camera2base_q.conjugate();
     Eigen::Matrix<T, 3, 1> base2camera_p = base2camera_q * (-camera2base_p);
 	
-	Eigen::Matrix<T, 3, 1> camera_pi = base2camera_q * pWi_.template cast<T>() + base2camera_p;
+	Eigen::Matrix<T, 3, 1> camera_pi = camera2base_q.toRotationMatrix() * pWi_.template cast<T>() + camera2base_p;
 	T u,v;
 	u = camera_pi(0,0)/camera_pi(2,0);
 	v = camera_pi(1,0)/camera_pi(2,0);
@@ -53,16 +53,16 @@ public:
 	T fx(intrinsic_.fx);
 	T fy(intrinsic_.fy);
 	T u0(intrinsic_.u0);
-	T v0(intrinsic_.u0);
-	T k1(intrinsic_.u0);
+	T v0(intrinsic_.v0);
+	T k1(intrinsic_.k1);
 	T k2(intrinsic_.u0);
 
 	T dist = T(1.) + r*(k1 + k2*r);
     Eigen::Map<Eigen::Matrix<T, 2, 1>> residuals(residuals_ptr);
     residuals(0, 0) =
-        fx * dist * u + u0 - pIi_(0,0);
+        fx  * u *dist + u0 - pIi_(0,0);
     residuals(1, 0) = 
-		fy * dist * v + v0  - pIi_(1,0);
+		fy  * v *dist  + v0  - pIi_(1,0);
 
     // Scale the residuals by the measurement uncertainty.
     residuals.applyOnTheLeft(sqrt_information_.template cast<T>());

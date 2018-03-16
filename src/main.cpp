@@ -8,6 +8,8 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/calib3d/calib3d.hpp>
 #include <ceres/ceres.h>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -217,7 +219,19 @@ int main(int argc, char **argv)
 	loadFiles(fileName_imgPtsCircle,imgPts_circle_data);
 	loadFiles(fileName_worldPtsCircle,worldPts_circle_data);
 	
-	 
+	IntrinsicParam intrinsic;
+	intrinsic.fx = 478.654;
+	intrinsic.fy = 478.618;
+	intrinsic.u0 = 366.201;
+	intrinsic.v0 = 208.891;
+	intrinsic.k1 = -0.37251;
+	intrinsic.k2 = 0.149073;
+	Mat	intrinsic_ =
+	(Mat_<double>(3, 3) << intrinsic.fx, 0, intrinsic.u0,
+	0, intrinsic.fy, intrinsic.v0,
+	0, 0, 1);
+	Mat distortion_ =
+		(Mat_<double>(4, 1) << intrinsic.k1,intrinsic.k2, 0, 0);
 	for(unsigned int i = 0; i < time_circle_data.size()/2; i++)
 	{
 		double cir_time = time_circle_data[2*i];
@@ -225,15 +239,68 @@ int main(int argc, char **argv)
 		odomData tmp_odom;
 		vector<Eigen::Matrix<double,2,1>> tmp_imgPts;
 		vector<Eigen::Matrix<double,3,1>> tmp_worldPts;
+		vector<Point3d> pWj;
+		vector<Point2d> pIj;
 		for(int j = 0; j < ptsNum; j++)
 		{
 			tmp_imgPts.push_back(Eigen::Matrix<double,2,1>(imgPts_circle_data[0],imgPts_circle_data[1]));
+			pIj.push_back(Point2d(imgPts_circle_data[0],imgPts_circle_data[1]));
 			for(int k = 0; k<2; k++)
 				imgPts_circle_data.erase(imgPts_circle_data.begin());
 			tmp_worldPts.push_back(Eigen::Matrix<double,3,1>(worldPts_circle_data[0],worldPts_circle_data[1],worldPts_circle_data[2]));
+			pWj.push_back(Point3d(worldPts_circle_data[0],worldPts_circle_data[1],worldPts_circle_data[2]));
+	
 			for(int k = 0; k<3; k++)
 				worldPts_circle_data.erase(worldPts_circle_data.begin());
 		}
+		ceres::Problem problem;
+		ceres::LossFunction *loss_function = NULL;
+
+		Mat tvec,rvec;
+		solvePnP(pWj,pIj,intrinsic_,distortion_,rvec,tvec);
+		Eigen::Vector3d trans;
+		Mat_<double> Rod = Mat_<double>::ones(3,3);;
+		Rodrigues(rvec,Rod);
+		Eigen::Matrix<double,3,3> Rq;
+		//cv2eigen(Rod,Rq);
+		Rq << Rod.at<double>(0,0),Rod.at<double>(0,1),Rod.at<double>(0,2),
+		Rod.at<double>(1,0),Rod.at<double>(1,1),Rod.at<double>(1,2),
+		Rod.at<double>(2,0),Rod.at<double>(2,1),Rod.at<double>(2,2);
+		trans << tvec.at<double>(0),tvec.at<double>(1),tvec.at<double>(2);
+		double a = sqrt(rvec.at<double>(0)*rvec.at<double>(0)+ rvec.at<double>(1) *rvec.at<double>(1)+rvec.at<double>(2) *rvec.at<double>(2));
+		Eigen::AngleAxisd r( a, Eigen::Vector3d ( rvec.at<double>(0),rvec.at<double>(1),rvec.at<double>(2) ) ); 
+		Eigen::Quaterniond q( r );
+		Eigen::Quaterniond q1( Rq );
+		cout << tvec <<endl;cout << rvec <<endl;
+
+		for(int j = 0; j < tmp_imgPts.size(); j++)
+		{
+			double infomation_scale =1;
+
+			//    const Eigen::Matrix<double, 6, 6> sqrt_information =
+			//        constraint.information.llt().matrixL();
+			const Eigen::Matrix<double, 2, 2> sqrt_information =
+				Eigen::MatrixXd::Identity(2, 2) * infomation_scale;
+			// Ceres will take ownership of the pointer.
+			//const Eigen::Matrix<double, 2, 1>& pIi, const Eigen::Matrix<double, 3, 1>& pWi,const IntrinsicParam& intrinsic,const Eigen::Matrix<double, 2, 2>& sqrt_information)
+			ceres::CostFunction* cost_function = reproject_factor::Create(
+				tmp_imgPts[j], tmp_worldPts[j], intrinsic,sqrt_information);
+			
+			problem.AddResidualBlock(cost_function, loss_function,
+							trans.data(),
+							q1.coeffs().data());
+		}
+		ceres::Solver::Options options;
+		options.max_num_iterations = 200;
+		options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
+		options.function_tolerance = 1e-8;
+
+		ceres::Solver::Summary summary;
+		ceres::Solve(options, &problem, &summary);
+        cout << trans <<endl;
+		std::cout << summary.FullReport() << '\n';
+		
+
 		while(fabs(odom_data[0] - cir_time)>0.03)
 		{
 			if(odom_data[0] -cir_time > 0.05)
@@ -255,8 +322,6 @@ int main(int argc, char **argv)
 		cout << fixed<<setprecision(10)<<tmp_odom.timeStamp << endl;
 	}
 	
-	ceres::Problem problem;
-    ceres::LossFunction *loss_function;
 
 // 	ceres::Problem problem;
 // 	for (int i = 0; i < bal_problem.num_observations(); ++i) {
