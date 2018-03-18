@@ -186,7 +186,10 @@ bool SolveOptimizationProblem(ceres::Problem* problem)
 } // namespace examples
 } // namespace ceres
 
-
+struct mPose{
+	Eigen::Vector3d trans;
+	Eigen::Quaterniond q;
+};
 void loadFiles(string fileName,vector<double> &data)
 {
 	ifstream fi(fileName);
@@ -255,7 +258,7 @@ int main(int argc, char **argv)
 		}
 		ceres::Problem problem;
 		ceres::LossFunction *loss_function = NULL;
-
+		mPose mp;
 		Mat tvec,rvec;
 		solvePnP(pWj,pIj,intrinsic_,distortion_,rvec,tvec);
 		Eigen::Vector3d trans;
@@ -270,9 +273,15 @@ int main(int argc, char **argv)
 		double a = sqrt(rvec.at<double>(0)*rvec.at<double>(0)+ rvec.at<double>(1) *rvec.at<double>(1)+rvec.at<double>(2) *rvec.at<double>(2));
 		Eigen::AngleAxisd r( a, Eigen::Vector3d ( rvec.at<double>(0),rvec.at<double>(1),rvec.at<double>(2) ) ); 
 		Eigen::Quaterniond q( r );
-		Eigen::Quaterniond q1( Rq );
-		cout << tvec <<endl;cout << rvec <<endl;
-
+		mp.trans = trans;
+		mp.q = Eigen::Quaterniond( Rq );
+		cout << setprecision (10);
+		cout << mp.trans <<endl;
+		double pt[6];
+		pt[0] = rvec.at<double>(0);pt[1] = rvec.at<double>(1);pt[2] = rvec.at<double>(2);
+		pt[3] = tvec.at<double>(0);pt[4] = tvec.at<double>(1);pt[5] = tvec.at<double>(2)+0.5;
+		cout <<pt[3]<<", "<< pt[4]<<", "<<pt[5] <<endl;
+		
 		for(int j = 0; j < tmp_imgPts.size(); j++)
 		{
 			double infomation_scale =1;
@@ -283,43 +292,60 @@ int main(int argc, char **argv)
 				Eigen::MatrixXd::Identity(2, 2) * infomation_scale;
 			// Ceres will take ownership of the pointer.
 			//const Eigen::Matrix<double, 2, 1>& pIi, const Eigen::Matrix<double, 3, 1>& pWi,const IntrinsicParam& intrinsic,const Eigen::Matrix<double, 2, 2>& sqrt_information)
-			ceres::CostFunction* cost_function = reproject_factor::Create(
+				
+// 			ceres::CostFunction* cost_function = reproject_factor::Create(
+// 				tmp_imgPts[j], tmp_worldPts[j], intrinsic,sqrt_information);
+// 			
+// 			problem.AddResidualBlock(cost_function, loss_function,
+// 							mp.trans.data(),
+// 							mp.q.coeffs().data());
+			ceres::CostFunction* cost_function = SnavelyReprojectionError::Create(
 				tmp_imgPts[j], tmp_worldPts[j], intrinsic,sqrt_information);
 			
 			problem.AddResidualBlock(cost_function, loss_function,
-							trans.data(),
-							q1.coeffs().data());
+							pt);
 		}
+		
+// 		ceres::Solver::Options options;
+// 		options.linear_solver_type = ceres::DENSE_SCHUR;
+// 		options.minimizer_progress_to_stdout = true;
+// 		ceres::Solver::Summary summary;
+// 		ceres::Solve(options, &problem, &summary);
+// 
 		ceres::Solver::Options options;
 		options.max_num_iterations = 200;
-		options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
-		options.function_tolerance = 1e-8;
-
+// 		options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
+		options.linear_solver_type = ceres::DENSE_SCHUR;
+		//options.function_tolerance = 1e-6;
 		ceres::Solver::Summary summary;
 		ceres::Solve(options, &problem, &summary);
-        cout << trans <<endl;
-		std::cout << summary.FullReport() << '\n';
+
+		cout << setprecision (10);
+
+		cout <<pt[3]<<", "<< pt[4]<<", "<<pt[5] <<endl;
+		cout  <<endl;
+		//std::cout << summary.FullReport() << '\n';
 		
 
-		while(fabs(odom_data[0] - cir_time)>0.03)
-		{
-			if(odom_data[0] -cir_time > 0.05)
-			{
-				cout << " tiao guo 66666666666666666"<<endl;
-				break;
-			}
-			for(int k = 0; k < 13; k++)
-			{
-				odom_data.erase(odom_data.begin());
-			}
-			tmp_odom.timeStamp = odom_data[0];
-			tmp_odom.xPos = odom_data[1];tmp_odom.yPos = odom_data[2];
-			tmp_odom.qx = odom_data[3];tmp_odom.qy = odom_data[4];tmp_odom.qz = odom_data[5];tmp_odom.qw = odom_data[6];
-			tmp_odom.tpx = odom_data[7];tmp_odom.tpy = odom_data[8];tmp_odom.tpz = odom_data[9];
-			tmp_odom.tax = odom_data[10];tmp_odom.tay = odom_data[11];tmp_odom.taz = odom_data[12];
-		}
-		cout <<fixed<<setprecision(10)<< cir_time <<endl;
-		cout << fixed<<setprecision(10)<<tmp_odom.timeStamp << endl;
+// 		while(fabs(odom_data[0] - cir_time)>0.03)
+// 		{
+// 			if(odom_data[0] -cir_time > 0.05)
+// 			{
+// 				cout << " tiao guo 66666666666666666"<<endl;
+// 				break;
+// 			}
+// 			for(int k = 0; k < 13; k++)
+// 			{
+// 				odom_data.erase(odom_data.begin());
+// 			}
+// 			tmp_odom.timeStamp = odom_data[0];
+// 			tmp_odom.xPos = odom_data[1];tmp_odom.yPos = odom_data[2];
+// 			tmp_odom.qx = odom_data[3];tmp_odom.qy = odom_data[4];tmp_odom.qz = odom_data[5];tmp_odom.qw = odom_data[6];
+// 			tmp_odom.tpx = odom_data[7];tmp_odom.tpy = odom_data[8];tmp_odom.tpz = odom_data[9];
+// 			tmp_odom.tax = odom_data[10];tmp_odom.tay = odom_data[11];tmp_odom.taz = odom_data[12];
+// 		}
+		//cout <<fixed<<setprecision(10)<< cir_time <<endl;
+		//cout << fixed<<setprecision(10)<<tmp_odom.timeStamp << endl;
 	}
 	
 
