@@ -177,18 +177,15 @@ int main(int argc, char **argv)
 		Rod.at<double>(1,0),Rod.at<double>(1,1),Rod.at<double>(1,2),
 		Rod.at<double>(2,0),Rod.at<double>(2,1),Rod.at<double>(2,2);
 		trans << tvec.at<double>(0),tvec.at<double>(1),tvec.at<double>(2);
-		double a = sqrt(rvec.at<double>(0)*rvec.at<double>(0)+ rvec.at<double>(1) *rvec.at<double>(1)+rvec.at<double>(2) *rvec.at<double>(2));
-		Eigen::AngleAxisd r( a, Eigen::Vector3d ( rvec.at<double>(0),rvec.at<double>(1),rvec.at<double>(2) ) ); 
-		Eigen::Quaterniond q( r );
+// 		Eigen::Quaterniond q( r );
 		mp.trans = trans;
 		mp.q = Eigen::Quaterniond( Rq );
 		w2c_vq.push_back(mp.q);
 		w2c_vp.push_back(trans);
-// 		cout << setprecision (10);
-// 		cout << mp.trans <<endl;
-		double pt[6];
-		pt[0] = rvec.at<double>(0);pt[1] = rvec.at<double>(1);pt[2] = rvec.at<double>(2);
-		pt[3] = tvec.at<double>(0);pt[4] = tvec.at<double>(1);pt[5] = tvec.at<double>(2);
+		
+// 		double pt[6];
+// 		pt[0] = rvec.at<double>(0);pt[1] = rvec.at<double>(1);pt[2] = rvec.at<double>(2);
+// 		pt[3] = tvec.at<double>(0);pt[4] = tvec.at<double>(1);pt[5] = tvec.at<double>(2);
 // 		cout <<pt[3]<<", "<< pt[4]<<", "<<pt[5] <<endl;
 		
 // 		for(int j = 0; j < tmp_imgPts.size(); j++)
@@ -235,7 +232,6 @@ int main(int argc, char **argv)
 // 		cout  <<endl;
 		//std::cout << summary.FullReport() << '\n';
 /******************************************************************************/
-
 
 		double errTime = fabs(odom_data[0] - cir_time);
 		while(1)
@@ -291,14 +287,14 @@ int main(int argc, char **argv)
 	ceres::examples::Pose3d camera2base;
 	camera2base.q = base2camera_q.conjugate();
 	camera2base.p = camera2base.q * (-base2camera.translation());
-// 	camera2base.p[0] += 10;
-// 	camera2base.p[1] += 10;
-// 	camera2base.p[2] = 10;
-// 	camera2base.q.coeffs()[0] += 0.1;
-// 	camera2base.q.coeffs()[1] -= 0.1;
-// 	camera2base.q.coeffs()[2] += 0.1;
-// 	camera2base.q.coeffs()[3] -= 0.1;
-// 	camera2base.q.normalize();
+	camera2base.p[0] += 10;
+	camera2base.p[1] += 10;
+	//camera2base.p[2] = 10;
+	camera2base.q.coeffs()[0] += 0.1;
+	camera2base.q.coeffs()[1] -= 0.1;
+	camera2base.q.coeffs()[2] += 0.1;
+	camera2base.q.coeffs()[3] -= 0.1;
+	camera2base.q.normalize();
 
 	ceres::LocalParameterization* g_quaternion_local_parameterization = new ceres::EigenQuaternionParameterization;
 
@@ -317,10 +313,10 @@ int main(int argc, char **argv)
 		w2cPre_p = w2c_vp[i];w2cCur_p = w2c_vp[i+1];
 		w2cPre_q = w2c_vq[i];w2cCur_q = w2c_vq[i+1];
 		
-		Eigen::Vector3d prev_camera_p =  w2cPre_q.toRotationMatrix().transpose()*(-w2cPre_p);
-		Eigen::Quaterniond prev_camera_q = w2cPre_q.conjugate();
-		Eigen::Vector3d cur_camera_p =  w2cCur_q.toRotationMatrix().transpose()*(-w2cCur_p);
-		Eigen::Quaterniond cur_camera_q = w2cCur_q.conjugate();
+		Eigen::Vector3d prev_camera_p =  w2cPre_p;
+		Eigen::Quaterniond prev_camera_q = w2cPre_q;
+		Eigen::Vector3d cur_camera_p =  w2cCur_p;
+		Eigen::Quaterniond cur_camera_q = w2cCur_q;
 
 		Eigen::Quaterniond prev_camera_q_inverse = prev_camera_q.conjugate();
 		Eigen::Quaterniond cur2prev_camera_q = prev_camera_q_inverse * cur_camera_q;

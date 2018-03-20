@@ -1,8 +1,0 @@
-prefix=/home/cyy/projects/test_ceres/build/devel
-
-Name: test_ceres
-Description: Description of test_ceres
-Version: 0.0.0
-Cflags: 
-Libs: -L/home/cyy/projects/test_ceres/build/devel/lib 
-Requires: 
