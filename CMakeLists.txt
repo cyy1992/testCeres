@@ -34,7 +34,7 @@ include_directories(
 )
 
 add_executable(test_ceres src/main.cpp )
-target_link_libraries(test_ceres  ${catkin_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIBRARIES})
+target_link_libraries(test_ceres ceres ${GFLAGS_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBS})
 
 
 ## Declare a C++ library
@@ -59,7 +59,8 @@ target_link_libraries(test_ceres  ${catkin_LIBRARIES} ${OpenCV_LIBS} ${CERES_LIB
 # set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
 
 ## Add cmake target dependencies of the executable
-## same as for the library above
+## same as for the library aboveif (GFLAGS)
+
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
