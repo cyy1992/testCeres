@@ -71,7 +71,7 @@ typedef std::map<int, Pose3d, std::less<int>,
                  Eigen::aligned_allocator<std::pair<const int, Pose3d> > >
     MapOfPoses;
 
-bool readPose3d(const std::string& filename, MapOfPoses* poses)
+bool readPose3d(const std::string& filename, MapOfPoses* poses,const int num)
 {
   assert(poses != NULL);
 
@@ -91,7 +91,7 @@ bool readPose3d(const std::string& filename, MapOfPoses* poses)
     // Clear any trailing whitespace from the line.
     infile >> std::ws;
 
-    if((id+50)%100 != 0)
+    if((id+50)%num != 0)
       continue;
 
     (*poses)[id] = pose;
@@ -100,6 +100,7 @@ bool readPose3d(const std::string& filename, MapOfPoses* poses)
   infile.close();
   return true;
 }
+
 
 }  // namespace examples
 }  // namespace ceres
