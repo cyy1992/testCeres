@@ -18,6 +18,7 @@ public:
 	template <typename T>
 	bool operator()(const T* const p_ptr, const T* const q_ptr, const T* const lineParam_ptr,T* residuals_ptr) const
 	{
+		
 		Eigen::Map<const Eigen::Matrix<T, 3, 1>> camera2base_p(p_ptr);
 		Eigen::Map<const Eigen::Quaternion<T>> camera2base_q(q_ptr);
 		Eigen::Map<const Eigen::Matrix<T, 3, 1>> w2c_p(world2cam_trans_);
