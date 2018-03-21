@@ -43,7 +43,7 @@ struct mPose{
 	Eigen::Quaterniond q;
 };
 ceres::LocalParameterization* g_quaternion_local_parameterization;
-void BuildOdomCameraProblem(const MapOfPoses& camera_poses,
+void buildOdomCameraProblem(const MapOfPoses& camera_poses,
                               const MapOfPoses& base_poses, Pose3d* camera2base,
                               double* k1, double* k2,
                               ceres::Problem* problem)
@@ -126,6 +126,12 @@ void BuildOdomCameraProblem(const MapOfPoses& camera_poses,
     prev_base_pose = cur_base_pose;
   }
 }
+
+void buildFitLineProblem(const MapOfPoses& cam_line,
+	const MapOfPoses& odom_line,ceres::Problem *problem)
+{
+	
+}
 void loadFiles(string fileName,vector<double> &data)
 {
 	ifstream fi(fileName);
@@ -148,198 +154,198 @@ int main(int argc, char **argv)
 	google::InitGoogleLogging(argv[0]);
 	//CERES_GFLAGS_NAMESPACE::ParseCommandLineFlags(&argc, &argv, true);
 	
-	vector<double> odom_data,time_circle_data,imgPts_circle_data,worldPts_circle_data;
-	string fileName_odom = "data1/odoms_circle.txt";
-	string fileName_timeCircle = "data1/times_circle.txt";
-	string fileName_imgPtsCircle = "data1/imgPts_circle.txt";
-	string fileName_worldPtsCircle = "data1/worldPts_circle.txt";
-	loadFiles(fileName_timeCircle,time_circle_data);
-	loadFiles(fileName_odom,odom_data);
-	loadFiles(fileName_imgPtsCircle,imgPts_circle_data);
-	loadFiles(fileName_worldPtsCircle,worldPts_circle_data);
-	
-	IntrinsicParam intrinsic;
-	intrinsic.fx = 478.654;
-	intrinsic.fy = 478.618;
-	intrinsic.u0 = 366.201;
-	intrinsic.v0 = 208.891;
-	intrinsic.k1 = -0.37251;
-	intrinsic.k2 = 0.149073;
-	Mat	intrinsic_ =
-	(Mat_<double>(3, 3) << intrinsic.fx, 0, intrinsic.u0,
-	0, intrinsic.fy, intrinsic.v0,
-	0, 0, 1);
-	Mat distortion_ =
-		(Mat_<double>(4, 1) << intrinsic.k1,intrinsic.k2, 0, 0);
-		
-	vector<Eigen::Quaterniond> w2c_vq; 
-	vector<Vector3d> w2c_vp; 
-	vector<Eigen::Quaterniond> odom_vq; 
-	vector<Vector3d> odom_vp; 
-
-	for(unsigned int i = 0; i < time_circle_data.size()/2-1; i++)
-	{
-		double cir_time = time_circle_data[2*i];
-		double ptsNum = time_circle_data[2*i+1];
-		odomData tmp_odom,last_odom;
-		vector<Eigen::Matrix<double,2,1>> tmp_imgPts;
-		vector<Eigen::Matrix<double,3,1>> tmp_worldPts;
-		vector<Point3d> pWj;
-		vector<Point2d> pIj;
-		for(int j = 0; j < ptsNum; j++)
-		{
-			tmp_imgPts.push_back(Eigen::Matrix<double,2,1>(imgPts_circle_data[0],imgPts_circle_data[1]));
-			pIj.push_back(Point2d(imgPts_circle_data[0],imgPts_circle_data[1]));
-			for(int k = 0; k<2; k++)
-				imgPts_circle_data.erase(imgPts_circle_data.begin());
-			tmp_worldPts.push_back(Eigen::Matrix<double,3,1>(worldPts_circle_data[0],worldPts_circle_data[1],worldPts_circle_data[2]));
-			pWj.push_back(Point3d(worldPts_circle_data[0],worldPts_circle_data[1],worldPts_circle_data[2]));
-	
-			for(int k = 0; k<3; k++)
-				worldPts_circle_data.erase(worldPts_circle_data.begin());
-		}
-		
-		mPose mp;
-		Mat tvec,rvec;
-		solvePnP(pWj,pIj,intrinsic_,distortion_,rvec,tvec);
-		Eigen::Vector3d trans;
-		Mat_<double> Rod = Mat_<double>::ones(3,3);;
-		Rodrigues(rvec,Rod);
-		Eigen::Matrix3d Rq;
-		//cv2eigen(Rod,Rq);
-		Rq << Rod.at<double>(0,0),Rod.at<double>(0,1),Rod.at<double>(0,2),
-		Rod.at<double>(1,0),Rod.at<double>(1,1),Rod.at<double>(1,2),
-		Rod.at<double>(2,0),Rod.at<double>(2,1),Rod.at<double>(2,2);
-		trans << tvec.at<double>(0),tvec.at<double>(1),tvec.at<double>(2);
-		double a = sqrt(rvec.at<double>(0)*rvec.at<double>(0)+ rvec.at<double>(1) *rvec.at<double>(1)+rvec.at<double>(2) *rvec.at<double>(2));
-		Eigen::AngleAxisd r( a, Eigen::Vector3d ( rvec.at<double>(0),rvec.at<double>(1),rvec.at<double>(2) ) ); 
-		Eigen::Quaterniond q( r );
-		mp.trans =-Rq.transpose()*trans;
-		mp.q = Eigen::Quaterniond( Rq.transpose() );
-		w2c_vq.push_back(mp.q);
-		w2c_vp.push_back(trans);
-// 		cout << setprecision (10);
-// 		cout << mp.trans <<endl;
-		double pt[6];
-		pt[0] = rvec.at<double>(0);pt[1] = rvec.at<double>(1);pt[2] = rvec.at<double>(2);
-		pt[3] = tvec.at<double>(0);pt[4] = tvec.at<double>(1);pt[5] = tvec.at<double>(2);
-		double errTime = fabs(odom_data[0] - cir_time);
-		while(1)
-		{
-			tmp_odom.timeStamp = odom_data[0];
-			tmp_odom.xPos = odom_data[1];tmp_odom.yPos = odom_data[2];
-			tmp_odom.qx = odom_data[3];tmp_odom.qy = odom_data[4];tmp_odom.qz = odom_data[5];tmp_odom.qw = odom_data[6];
-			tmp_odom.tpx = odom_data[7];tmp_odom.tpy = odom_data[8];tmp_odom.tpz = odom_data[9];
-			tmp_odom.tax = odom_data[10];tmp_odom.tay = odom_data[11];tmp_odom.taz = odom_data[12];
-
-			double errTime1 = fabs(odom_data[13] - cir_time);
-			if(errTime1 > errTime)
-			{
-				//cout << " tiao guo 66666666666666666"<<endl;
-				break;
-			}
-			errTime = errTime1;
-			for(int k = 0; k < 13; k++)
-			{
-				odom_data.erase(odom_data.begin());
-			}
-		}
-		if(tmp_odom.yPos == last_odom.yPos)
-			cout << "odom error" <<endl;
-		last_odom = tmp_odom;
-		Eigen::Quaterniond odom_q(tmp_odom.qw,tmp_odom.qx,tmp_odom.qy,tmp_odom.qz);
-		Eigen::Vector3d odom_p(tmp_odom.xPos,tmp_odom.yPos,0);
-		odom_vq.push_back(odom_q);
-		odom_vp.push_back(odom_p);
-			//cout <<fixed<<setprecision(10)<< cir_time <<endl;
-			//cout << fixed<<setprecision(10)<<tmp_odom.timeStamp << endl;
-	}
-	
-	vector<double> odom_data_line,time_line_data,imgPts_line_data,worldPts_line_data;
-	string fileName_odom_line = "data1/odoms_line.txt";
-	string fileName_timeLine = "data1/times_line.txt";
-	string fileName_imgPtsLine = "data1/imgPts_line.txt";
-	string fileName_worldPtsLine = "data1/worldPts_line.txt";
-	loadFiles(fileName_timeLine,time_line_data);
-	loadFiles(fileName_odom_line,odom_data_line);
-	loadFiles(fileName_imgPtsLine,imgPts_line_data);
-	loadFiles(fileName_worldPtsLine,worldPts_line_data);
-	vector<Eigen::Quaternion<double>> w2c_vq_line; 
-	vector<Vector3d> w2c_vp_line; 
-	vector<Eigen::Quaterniond> odom_vq_line; 
-	vector<Vector3d> odom_vp_line; 
-
-	for(unsigned int i = 0; i < time_line_data.size()/2-1; i++)
-	{
-		double cir_time = time_line_data[2*i];
-		double ptsNum = time_line_data[2*i+1];
-		odomData tmp_odom,last_odom;
-		vector<Eigen::Matrix<double,2,1>> tmp_imgPts;
-		vector<Eigen::Matrix<double,3,1>> tmp_worldPts;
-		vector<Point3d> pWj;
-		vector<Point2d> pIj;
-		for(int j = 0; j < ptsNum; j++)
-		{
-			tmp_imgPts.push_back(Eigen::Matrix<double,2,1>(imgPts_line_data[0],imgPts_line_data[1]));
-			pIj.push_back(Point2d(imgPts_line_data[0],imgPts_line_data[1]));
-			for(int k = 0; k<2; k++)
-				imgPts_line_data.erase(imgPts_line_data.begin());
-			tmp_worldPts.push_back(Eigen::Matrix<double,3,1>(worldPts_line_data[0],worldPts_line_data[1],worldPts_line_data[2]));
-			pWj.push_back(Point3d(worldPts_line_data[0],worldPts_line_data[1],worldPts_line_data[2]));
-	
-			for(int k = 0; k<3; k++)
-				worldPts_line_data.erase(worldPts_line_data.begin());
-		}
-// 		ceres::Problem problem;
-// 		ceres::LossFunction *loss_function = NULL;
-		mPose mp;
-		Mat tvec,rvec;
-		solvePnP(pWj,pIj,intrinsic_,distortion_,rvec,tvec);
-		Eigen::Vector3d trans;
-		Mat_<double> Rod = Mat_<double>::ones(3,3);;
-		Rodrigues(rvec,Rod);
-		Eigen::Matrix<double,3,3> Rq;
-		//cv2eigen(Rod,Rq);
-		Rq << Rod.at<double>(0,0),Rod.at<double>(0,1),Rod.at<double>(0,2),
-		Rod.at<double>(1,0),Rod.at<double>(1,1),Rod.at<double>(1,2),
-		Rod.at<double>(2,0),Rod.at<double>(2,1),Rod.at<double>(2,2);
-		trans << tvec.at<double>(0),tvec.at<double>(1),tvec.at<double>(2);
-		mp.trans = -Rq.transpose()*trans;
-		mp.q = Eigen::Quaterniond( Rq.transpose());
-		w2c_vq_line.push_back(mp.q);
-		w2c_vp_line.push_back(trans);
-		double errTime = fabs(odom_data_line[0] - cir_time);
-		while(1)
-		{
-			tmp_odom.timeStamp = odom_data_line[0];
-			tmp_odom.xPos = odom_data_line[1];tmp_odom.yPos = odom_data_line[2];
-			tmp_odom.qx = odom_data_line[3];tmp_odom.qy = odom_data_line[4];tmp_odom.qz = odom_data_line[5];tmp_odom.qw = odom_data_line[6];
-			tmp_odom.tpx = odom_data_line[7];tmp_odom.tpy = odom_data_line[8];tmp_odom.tpz = odom_data_line[9];
-			tmp_odom.tax = odom_data_line[10];tmp_odom.tay = odom_data_line[11];tmp_odom.taz = odom_data_line[12];
-
-			double errTime1 = fabs(odom_data_line[13] - cir_time);
-			if(errTime1 > errTime)
-			{
-				//cout << " tiao guo 66666666666666666"<<endl;
-				break;
-			}
-			errTime = errTime1;
-			for(int k = 0; k < 13; k++)
-			{
-				odom_data_line.erase(odom_data_line.begin());
-			}
-		}
-		if(tmp_odom.yPos == last_odom.yPos)
-			cout << "odom error" <<endl;
-		last_odom = tmp_odom;
-		Eigen::Quaterniond odom_q(tmp_odom.qw,tmp_odom.qx,tmp_odom.qy,tmp_odom.qz);
-		Eigen::Vector3d odom_p(tmp_odom.xPos,tmp_odom.yPos,0);
-
-		odom_vq_line.push_back(odom_q);
-		odom_vp_line.push_back(odom_p);
-		//cout <<fixed<<setprecision(10)<< cir_time <<endl;
-		//cout << fixed<<setprecision(10)<<tmp_odom.timeStamp << endl;
-	}
+// 	vector<double> odom_data,time_circle_data,imgPts_circle_data,worldPts_circle_data;
+// 	string fileName_odom = "data1/odoms_circle.txt";
+// 	string fileName_timeCircle = "data1/times_circle.txt";
+// 	string fileName_imgPtsCircle = "data1/imgPts_circle.txt";
+// 	string fileName_worldPtsCircle = "data1/worldPts_circle.txt";
+// 	loadFiles(fileName_timeCircle,time_circle_data);
+// 	loadFiles(fileName_odom,odom_data);
+// 	loadFiles(fileName_imgPtsCircle,imgPts_circle_data);
+// 	loadFiles(fileName_worldPtsCircle,worldPts_circle_data);
+// 	
+// 	IntrinsicParam intrinsic;
+// 	intrinsic.fx = 478.654;
+// 	intrinsic.fy = 478.618;
+// 	intrinsic.u0 = 366.201;
+// 	intrinsic.v0 = 208.891;
+// 	intrinsic.k1 = -0.37251;
+// 	intrinsic.k2 = 0.149073;
+// 	Mat	intrinsic_ =
+// 	(Mat_<double>(3, 3) << intrinsic.fx, 0, intrinsic.u0,
+// 	0, intrinsic.fy, intrinsic.v0,
+// 	0, 0, 1);
+// 	Mat distortion_ =
+// 		(Mat_<double>(4, 1) << intrinsic.k1,intrinsic.k2, 0, 0);
+// 		
+// 	vector<Eigen::Quaterniond> w2c_vq; 
+// 	vector<Vector3d> w2c_vp; 
+// 	vector<Eigen::Quaterniond> odom_vq; 
+// 	vector<Vector3d> odom_vp; 
+// 
+// 	for(unsigned int i = 0; i < time_circle_data.size()/2-1; i++)
+// 	{
+// 		double cir_time = time_circle_data[2*i];
+// 		double ptsNum = time_circle_data[2*i+1];
+// 		odomData tmp_odom,last_odom;
+// 		vector<Eigen::Matrix<double,2,1>> tmp_imgPts;
+// 		vector<Eigen::Matrix<double,3,1>> tmp_worldPts;
+// 		vector<Point3d> pWj;
+// 		vector<Point2d> pIj;
+// 		for(int j = 0; j < ptsNum; j++)
+// 		{
+// 			tmp_imgPts.push_back(Eigen::Matrix<double,2,1>(imgPts_circle_data[0],imgPts_circle_data[1]));
+// 			pIj.push_back(Point2d(imgPts_circle_data[0],imgPts_circle_data[1]));
+// 			for(int k = 0; k<2; k++)
+// 				imgPts_circle_data.erase(imgPts_circle_data.begin());
+// 			tmp_worldPts.push_back(Eigen::Matrix<double,3,1>(worldPts_circle_data[0],worldPts_circle_data[1],worldPts_circle_data[2]));
+// 			pWj.push_back(Point3d(worldPts_circle_data[0],worldPts_circle_data[1],worldPts_circle_data[2]));
+// 	
+// 			for(int k = 0; k<3; k++)
+// 				worldPts_circle_data.erase(worldPts_circle_data.begin());
+// 		}
+// 		
+// 		mPose mp;
+// 		Mat tvec,rvec;
+// 		solvePnP(pWj,pIj,intrinsic_,distortion_,rvec,tvec);
+// 		Eigen::Vector3d trans;
+// 		Mat_<double> Rod = Mat_<double>::ones(3,3);;
+// 		Rodrigues(rvec,Rod);
+// 		Eigen::Matrix3d Rq;
+// 		//cv2eigen(Rod,Rq);
+// 		Rq << Rod.at<double>(0,0),Rod.at<double>(0,1),Rod.at<double>(0,2),
+// 		Rod.at<double>(1,0),Rod.at<double>(1,1),Rod.at<double>(1,2),
+// 		Rod.at<double>(2,0),Rod.at<double>(2,1),Rod.at<double>(2,2);
+// 		trans << tvec.at<double>(0),tvec.at<double>(1),tvec.at<double>(2);
+// 		double a = sqrt(rvec.at<double>(0)*rvec.at<double>(0)+ rvec.at<double>(1) *rvec.at<double>(1)+rvec.at<double>(2) *rvec.at<double>(2));
+// 		Eigen::AngleAxisd r( a, Eigen::Vector3d ( rvec.at<double>(0),rvec.at<double>(1),rvec.at<double>(2) ) ); 
+// 		Eigen::Quaterniond q( r );
+// 		mp.trans =-Rq.transpose()*trans;
+// 		mp.q = Eigen::Quaterniond( Rq.transpose() );
+// 		w2c_vq.push_back(mp.q);
+// 		w2c_vp.push_back(trans);
+// // 		cout << setprecision (10);
+// // 		cout << mp.trans <<endl;
+// 		double pt[6];
+// 		pt[0] = rvec.at<double>(0);pt[1] = rvec.at<double>(1);pt[2] = rvec.at<double>(2);
+// 		pt[3] = tvec.at<double>(0);pt[4] = tvec.at<double>(1);pt[5] = tvec.at<double>(2);
+// 		double errTime = fabs(odom_data[0] - cir_time);
+// 		while(1)
+// 		{
+// 			tmp_odom.timeStamp = odom_data[0];
+// 			tmp_odom.xPos = odom_data[1];tmp_odom.yPos = odom_data[2];
+// 			tmp_odom.qx = odom_data[3];tmp_odom.qy = odom_data[4];tmp_odom.qz = odom_data[5];tmp_odom.qw = odom_data[6];
+// 			tmp_odom.tpx = odom_data[7];tmp_odom.tpy = odom_data[8];tmp_odom.tpz = odom_data[9];
+// 			tmp_odom.tax = odom_data[10];tmp_odom.tay = odom_data[11];tmp_odom.taz = odom_data[12];
+// 
+// 			double errTime1 = fabs(odom_data[13] - cir_time);
+// 			if(errTime1 > errTime)
+// 			{
+// 				//cout << " tiao guo 66666666666666666"<<endl;
+// 				break;
+// 			}
+// 			errTime = errTime1;
+// 			for(int k = 0; k < 13; k++)
+// 			{
+// 				odom_data.erase(odom_data.begin());
+// 			}
+// 		}
+// 		if(tmp_odom.yPos == last_odom.yPos)
+// 			cout << "odom error" <<endl;
+// 		last_odom = tmp_odom;
+// 		Eigen::Quaterniond odom_q(tmp_odom.qw,tmp_odom.qx,tmp_odom.qy,tmp_odom.qz);
+// 		Eigen::Vector3d odom_p(tmp_odom.xPos,tmp_odom.yPos,0);
+// 		odom_vq.push_back(odom_q);
+// 		odom_vp.push_back(odom_p);
+// 			//cout <<fixed<<setprecision(10)<< cir_time <<endl;
+// 			//cout << fixed<<setprecision(10)<<tmp_odom.timeStamp << endl;
+// 	}
+// 	
+// 	vector<double> odom_data_line,time_line_data,imgPts_line_data,worldPts_line_data;
+// 	string fileName_odom_line = "data1/odoms_line.txt";
+// 	string fileName_timeLine = "data1/times_line.txt";
+// 	string fileName_imgPtsLine = "data1/imgPts_line.txt";
+// 	string fileName_worldPtsLine = "data1/worldPts_line.txt";
+// 	loadFiles(fileName_timeLine,time_line_data);
+// 	loadFiles(fileName_odom_line,odom_data_line);
+// 	loadFiles(fileName_imgPtsLine,imgPts_line_data);
+// 	loadFiles(fileName_worldPtsLine,worldPts_line_data);
+// 	vector<Eigen::Quaternion<double>> w2c_vq_line; 
+// 	vector<Vector3d> w2c_vp_line; 
+// 	vector<Eigen::Quaterniond> odom_vq_line; 
+// 	vector<Vector3d> odom_vp_line; 
+// 
+// 	for(unsigned int i = 0; i < time_line_data.size()/2-1; i++)
+// 	{
+// 		double cir_time = time_line_data[2*i];
+// 		double ptsNum = time_line_data[2*i+1];
+// 		odomData tmp_odom,last_odom;
+// 		vector<Eigen::Matrix<double,2,1>> tmp_imgPts;
+// 		vector<Eigen::Matrix<double,3,1>> tmp_worldPts;
+// 		vector<Point3d> pWj;
+// 		vector<Point2d> pIj;
+// 		for(int j = 0; j < ptsNum; j++)
+// 		{
+// 			tmp_imgPts.push_back(Eigen::Matrix<double,2,1>(imgPts_line_data[0],imgPts_line_data[1]));
+// 			pIj.push_back(Point2d(imgPts_line_data[0],imgPts_line_data[1]));
+// 			for(int k = 0; k<2; k++)
+// 				imgPts_line_data.erase(imgPts_line_data.begin());
+// 			tmp_worldPts.push_back(Eigen::Matrix<double,3,1>(worldPts_line_data[0],worldPts_line_data[1],worldPts_line_data[2]));
+// 			pWj.push_back(Point3d(worldPts_line_data[0],worldPts_line_data[1],worldPts_line_data[2]));
+// 	
+// 			for(int k = 0; k<3; k++)
+// 				worldPts_line_data.erase(worldPts_line_data.begin());
+// 		}
+// // 		ceres::Problem problem;
+// // 		ceres::LossFunction *loss_function = NULL;
+// 		mPose mp;
+// 		Mat tvec,rvec;
+// 		solvePnP(pWj,pIj,intrinsic_,distortion_,rvec,tvec);
+// 		Eigen::Vector3d trans;
+// 		Mat_<double> Rod = Mat_<double>::ones(3,3);;
+// 		Rodrigues(rvec,Rod);
+// 		Eigen::Matrix<double,3,3> Rq;
+// 		//cv2eigen(Rod,Rq);
+// 		Rq << Rod.at<double>(0,0),Rod.at<double>(0,1),Rod.at<double>(0,2),
+// 		Rod.at<double>(1,0),Rod.at<double>(1,1),Rod.at<double>(1,2),
+// 		Rod.at<double>(2,0),Rod.at<double>(2,1),Rod.at<double>(2,2);
+// 		trans << tvec.at<double>(0),tvec.at<double>(1),tvec.at<double>(2);
+// 		mp.trans = -Rq.transpose()*trans;
+// 		mp.q = Eigen::Quaterniond( Rq.transpose());
+// 		w2c_vq_line.push_back(mp.q);
+// 		w2c_vp_line.push_back(trans);
+// 		double errTime = fabs(odom_data_line[0] - cir_time);
+// 		while(1)
+// 		{
+// 			tmp_odom.timeStamp = odom_data_line[0];
+// 			tmp_odom.xPos = odom_data_line[1];tmp_odom.yPos = odom_data_line[2];
+// 			tmp_odom.qx = odom_data_line[3];tmp_odom.qy = odom_data_line[4];tmp_odom.qz = odom_data_line[5];tmp_odom.qw = odom_data_line[6];
+// 			tmp_odom.tpx = odom_data_line[7];tmp_odom.tpy = odom_data_line[8];tmp_odom.tpz = odom_data_line[9];
+// 			tmp_odom.tax = odom_data_line[10];tmp_odom.tay = odom_data_line[11];tmp_odom.taz = odom_data_line[12];
+// 
+// 			double errTime1 = fabs(odom_data_line[13] - cir_time);
+// 			if(errTime1 > errTime)
+// 			{
+// 				//cout << " tiao guo 66666666666666666"<<endl;
+// 				break;
+// 			}
+// 			errTime = errTime1;
+// 			for(int k = 0; k < 13; k++)
+// 			{
+// 				odom_data_line.erase(odom_data_line.begin());
+// 			}
+// 		}
+// 		if(tmp_odom.yPos == last_odom.yPos)
+// 			cout << "odom error" <<endl;
+// 		last_odom = tmp_odom;
+// 		Eigen::Quaterniond odom_q(tmp_odom.qw,tmp_odom.qx,tmp_odom.qy,tmp_odom.qz);
+// 		Eigen::Vector3d odom_p(tmp_odom.xPos,tmp_odom.yPos,0);
+// 
+// 		odom_vq_line.push_back(odom_q);
+// 		odom_vp_line.push_back(odom_p);
+// 		//cout <<fixed<<setprecision(10)<< cir_time <<endl;
+// 		//cout << fixed<<setprecision(10)<<tmp_odom.timeStamp << endl;
+// 	}
 // 	ofstream base_circle("base_poses_circle.txt"),base_line("base_poses_line.txt"),cam_circle("camera_poses_circle.txt"),cam_line("camera_poses_line.txt");
 // 	for(unsigned int i =0; i<odom_vq_line.size();i++)
 // 	{
@@ -413,6 +419,8 @@ int main(int argc, char **argv)
 		ceres::examples::Pose3d base_pose = base_poses_iter->second;
 		base_poses_iter->second.p = base_pose.p*1000;
 	}
+	MapOfPoses cam_line,odom_line;
+
 	g_quaternion_local_parameterization = new ceres::EigenQuaternionParameterization;
 
 	/***************************************************************/
@@ -421,11 +429,17 @@ int main(int argc, char **argv)
 	Eigen::Quaterniond odomPre_q,odomCur_q,w2cPre_q,w2cCur_q;
 	Eigen::Vector3d odomPre_p,w2cPre_p,odomCur_p,w2cCur_p;
 	bool flag = true;
- 	BuildOdomCameraProblem(cam_circle_data, odom_circle_data,
+ 	buildOdomCameraProblem(cam_circle_data, odom_circle_data,
                                             &camera2base, &k1, &k2, &problem);
-	BuildOdomCameraProblem(cam_line_data, odom_line_data,
+	buildOdomCameraProblem(cam_line_data, odom_line_data,
                                             &camera2base, &k1, &k2, &problem);
-
+	
+	ceres::examples::readPose3d("data/camera_poses_line.txt",&cam_line,1);
+	ceres::examples::readPose3d("data/base_poses_line.txt",&odom_line,1);
+	buildFitLineProblem(cam_line,odom_line,problem);
+	
+	
+	
 	ceres::Solver::Options options;
 	options.max_num_iterations = 200;
 	options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
