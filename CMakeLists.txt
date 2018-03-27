@@ -35,8 +35,10 @@ include_directories(
 
 add_executable(test_ceres src/main.cpp )
 target_link_libraries(test_ceres ceres ${GFLAGS_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBS})
+add_executable(reproject src/reproject.cpp )
+target_link_libraries(reproject ceres ${GFLAGS_LIBRARIES} ${catkin_LIBRARIES} ${OpenCV_LIBS})
 
-install(DIRECTORY data data1
+install(DIRECTORY data data1 data2
   DESTINATION ${PROJECT_BINARY_DIR}/devel/lib/test_ceres
 )
 

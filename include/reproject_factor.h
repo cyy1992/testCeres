@@ -37,14 +37,14 @@ public:
   bool operator()(const T* const p_ptr, const T* const q_ptr,
                   T* residuals_ptr) const
   {
-    Eigen::Map<const Eigen::Matrix<T, 3, 1>> camera2base_p(p_ptr);
-    Eigen::Map<const Eigen::Quaternion<T>> camera2base_q(q_ptr);
+    Eigen::Map<const Eigen::Matrix<T, 3, 1>> cam2world_p(p_ptr);
+    Eigen::Map<const Eigen::Quaternion<T>> cam2world_q(q_ptr);
 	
     // Compute the relative transformation between the two frames.
 //     Eigen::Quaternion<T> base2camera_q = camera2base_q.conjugate();
 //     Eigen::Matrix<T, 3, 1> base2camera_p = base2camera_q * (-camera2base_p);
 	
-	Eigen::Matrix<T, 3, 1> camera_pi = camera2base_q.toRotationMatrix() * pWi_.template cast<T>() + camera2base_p;
+	Eigen::Matrix<T, 3, 1> camera_pi = cam2world_q.conjugate() *( pWi_.template cast<T>()-  cam2world_p);
 	T u,v;
 	u = camera_pi(0,0)/camera_pi(2,0);
 	v = camera_pi(1,0)/camera_pi(2,0);
@@ -67,8 +67,7 @@ public:
 
     // Scale the residuals by the measurement uncertainty.
     residuals.applyOnTheLeft(sqrt_information_.template cast<T>());
-
-    return true;
+	return true;
   }
 
   static ceres::CostFunction*

@@ -6,10 +6,10 @@
 #include <stdlib.h>
 #include <vector>
 
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/calib3d/calib3d.hpp>
+#include <opencv-3.3.1/opencv2/core/core.hpp>
+#include <opencv-3.3.1/opencv2/highgui/highgui.hpp>
+#include <opencv-3.3.1/opencv2/imgproc/imgproc.hpp>
+#include <opencv-3.3.1/opencv2/calib3d/calib3d.hpp>
 
 #include <ceres/ceres.h>
 #include "gflags/gflags.h"
@@ -20,6 +20,7 @@
 
 #include "reproject_factor.h"
 #include "odom_factor.h"
+#include "line_factor.h"
 using namespace std;
 using namespace cv;
 using ceres::AutoDiffCostFunction;
@@ -30,7 +31,9 @@ using ceres::Problem;
 using ceres::Solve;
 using ceres::Solver;
 
-
+/*
+ * 
+ * 
 struct odomData{
 	double timeStamp;
 	double xPos;
@@ -41,96 +44,190 @@ struct odomData{
 struct mPose{
 	Eigen::Vector3d trans;
 	Eigen::Quaterniond q;
-};
+};*/
+
+
 ceres::LocalParameterization* g_quaternion_local_parameterization;
 void buildOdomCameraProblem(const MapOfPoses& camera_poses,
                               const MapOfPoses& base_poses, Pose3d* camera2base,
                               double* k1, double* k2,
                               ceres::Problem* problem)
 {
-  CHECK(camera2base != NULL);
-  CHECK(camera_poses.size() == base_poses.size());
-  CHECK(problem != NULL);
-  if (camera_poses.size() < 2 || base_poses.size() < 2)
-  {
-    LOG(INFO) << "No constraints, no problem to optimize.";
-    return;
-  }
+	CHECK(camera2base != NULL);
+	CHECK(camera_poses.size() == base_poses.size());
+	CHECK(problem != NULL);
+	if (camera_poses.size() < 2 || base_poses.size() < 2)
+	{
+		LOG(INFO) << "No constraints, no problem to optimize.";
+		return;
+	}
 
-  ceres::LossFunction* loss_function = NULL;
-  //  ceres::LocalParameterization* quaternion_local_parameterization =
-  //      new EigenQuaternionParameterization;
+	ceres::LossFunction* loss_function = NULL;
+	//  ceres::LocalParameterization* quaternion_local_parameterization =
+	//      new EigenQuaternionParameterization;
 
-  std::map<int, Pose3d, std::less<int>,
-           Eigen::aligned_allocator<std::pair<const int, Pose3d>>>::
-      const_iterator camera_poses_iter = camera_poses.begin();
-  std::map<int, Pose3d, std::less<int>,
-           Eigen::aligned_allocator<std::pair<const int, Pose3d>>>::
-      const_iterator base_poses_iter = base_poses.begin();
-  Pose3d prev_camera_pose = camera_poses_iter->second;
-  Pose3d prev_base_pose = base_poses_iter->second;
-  for (++camera_poses_iter, ++base_poses_iter;
-       camera_poses_iter != camera_poses.end();
-       ++camera_poses_iter, ++base_poses_iter)
-  {
-    Pose3d cur_camera_pose = camera_poses_iter->second;
-    Pose3d cur_base_pose = base_poses_iter->second;
+	std::map<int, Pose3d, std::less<int>,
+			Eigen::aligned_allocator<std::pair<const int, Pose3d>>>::
+		const_iterator camera_poses_iter = camera_poses.begin();
+	std::map<int, Pose3d, std::less<int>,
+			Eigen::aligned_allocator<std::pair<const int, Pose3d>>>::
+		const_iterator base_poses_iter = base_poses.begin();
+	Pose3d prev_camera_pose = camera_poses_iter->second;
+	Pose3d prev_base_pose = base_poses_iter->second;
+	for (++camera_poses_iter, ++base_poses_iter;
+		camera_poses_iter != camera_poses.end();
+		++camera_poses_iter, ++base_poses_iter)
+	{
+		Pose3d cur_camera_pose = camera_poses_iter->second;
+		Pose3d cur_base_pose = base_poses_iter->second;
 
-    // calc cur2prev_camera
-    Eigen::Vector3d prev_camera_p = prev_camera_pose.p;
-    Eigen::Quaterniond prev_camera_q = prev_camera_pose.q;
-    Eigen::Vector3d cur_camera_p = cur_camera_pose.p;
-    Eigen::Quaterniond cur_camera_q = cur_camera_pose.q;
+		// calc cur2prev_camera
+		Eigen::Vector3d prev_camera_p = prev_camera_pose.p;
+		Eigen::Quaterniond prev_camera_q = prev_camera_pose.q;
+		Eigen::Vector3d cur_camera_p = cur_camera_pose.p;
+		Eigen::Quaterniond cur_camera_q = cur_camera_pose.q;
 
-    Eigen::Quaterniond prev_camera_q_inverse = prev_camera_q.conjugate();
-    Eigen::Quaterniond cur2prev_camera_q = prev_camera_q_inverse * cur_camera_q;
-    Eigen::Vector3d cur2prev_camera_p =
-        prev_camera_q_inverse * (cur_camera_p - prev_camera_p);
-    Pose3d cur2prev_camera;
-    cur2prev_camera.p = cur2prev_camera_p;
-    cur2prev_camera.q = cur2prev_camera_q;
+		Eigen::Quaterniond prev_camera_q_inverse = prev_camera_q.conjugate();
+		Eigen::Quaterniond cur2prev_camera_q = prev_camera_q_inverse * cur_camera_q;
+		Eigen::Vector3d cur2prev_camera_p =
+			prev_camera_q_inverse * (cur_camera_p - prev_camera_p);
+		Pose3d cur2prev_camera;
+		cur2prev_camera.p = cur2prev_camera_p;
+		cur2prev_camera.q = cur2prev_camera_q;
 
-    // calc cur2prev_base
-    Eigen::Vector3d prev_base_p = prev_base_pose.p;
-    Eigen::Quaterniond prev_base_q = prev_base_pose.q;
-    Eigen::Vector3d cur_base_p = cur_base_pose.p;
-    Eigen::Quaterniond cur_base_q = cur_base_pose.q;
+		// calc cur2prev_base
+		Eigen::Vector3d prev_base_p = prev_base_pose.p;
+		Eigen::Quaterniond prev_base_q = prev_base_pose.q;
+		Eigen::Vector3d cur_base_p = cur_base_pose.p;
+		Eigen::Quaterniond cur_base_q = cur_base_pose.q;
 
-    Eigen::Quaterniond prev_base_q_inverse = prev_base_q.conjugate();
-    Eigen::Quaterniond cur2prev_base_q = prev_base_q_inverse * cur_base_q;
-    Eigen::Vector3d cur2prev_base_p =
-        prev_base_q_inverse * (cur_base_p - prev_base_p);
-    Pose3d cur2prev_base;
-    cur2prev_base.p = cur2prev_base_p;
-    cur2prev_base.q = cur2prev_base_q;
+		Eigen::Quaterniond prev_base_q_inverse = prev_base_q.conjugate();
+		Eigen::Quaterniond cur2prev_base_q = prev_base_q_inverse * cur_base_q;
+		Eigen::Vector3d cur2prev_base_p =
+			prev_base_q_inverse * (cur_base_p - prev_base_p);
+		Pose3d cur2prev_base;
+		cur2prev_base.p = cur2prev_base_p;
+		cur2prev_base.q = cur2prev_base_q;
 
-    double infomation_scale =
-        2. / (cur_camera_pose.covariance + prev_camera_pose.covariance);
+		double infomation_scale =
+			2. / (cur_camera_pose.covariance + prev_camera_pose.covariance);
 
-    //    const Eigen::Matrix<double, 6, 6> sqrt_information =
-    //        constraint.information.llt().matrixL();
-    const Eigen::Matrix<double, 6, 6> sqrt_information =
-        Eigen::MatrixXd::Identity(6, 6) * infomation_scale;
-    // Ceres will take ownership of the pointer.
-    ceres::CostFunction* cost_function = odom_factor::Create(
-        cur2prev_camera, cur2prev_base, sqrt_information);
+		//    const Eigen::Matrix<double, 6, 6> sqrt_information =
+		//        constraint.information.llt().matrixL();
+		const Eigen::Matrix<double, 6, 6> sqrt_information =
+			Eigen::MatrixXd::Identity(6, 6) * infomation_scale;
+		// Ceres will take ownership of the pointer.
+		ceres::CostFunction* cost_function = odom_factor::Create(
+			cur2prev_camera, cur2prev_base, sqrt_information);
 
-    problem->AddResidualBlock(cost_function, loss_function,
-                              camera2base->p.data(),
-                              camera2base->q.coeffs().data(), k1, k2);
+		problem->AddResidualBlock(cost_function, loss_function,
+								camera2base->p.data(),
+								camera2base->q.coeffs().data(), k1, k2);
 
-    problem->SetParameterization(camera2base->q.coeffs().data(),
-                                 g_quaternion_local_parameterization);
+		problem->SetParameterization(camera2base->q.coeffs().data(),
+									g_quaternion_local_parameterization);
 
-    prev_camera_pose = cur_camera_pose;
-    prev_base_pose = cur_base_pose;
-  }
+		prev_camera_pose = cur_camera_pose;
+		prev_base_pose = cur_base_pose;
+	}
 }
+Eigen::Vector3d coeff;
 
 void buildFitLineProblem(const MapOfPoses& cam_line,
-	const MapOfPoses& odom_line,ceres::Problem *problem)
+	const MapOfPoses& odom_line,Pose3d* camera2base,ceres::Problem *problem)
 {
+	CHECK(camera2base != NULL);
+	CHECK(cam_line.size() == odom_line.size());
+	CHECK(problem != NULL);
+	std::map<int, Pose3d, std::less<int>,
+			Eigen::aligned_allocator<std::pair<const int, Pose3d>>>::
+		const_iterator camera_poses_iter = cam_line.begin();
+	std::map<int, Pose3d, std::less<int>,
+			Eigen::aligned_allocator<std::pair<const int, Pose3d>>>::
+		const_iterator base_poses_iter = odom_line.begin();
+	Pose3d cam02world_pose = camera_poses_iter->second;
+	Pose3d base02odom_pose = base_poses_iter->second;
+	Eigen::Quaterniond odom2base0_q = base02odom_pose.q.conjugate();
+	vector<cv::Point2f> fit_pts;
+	for (++base_poses_iter;base_poses_iter != odom_line.end();++base_poses_iter)
+	{
+		Pose3d basei2odom_pose= base_poses_iter->second;
+		Eigen::Vector3d basei2base0_p = odom2base0_q *(basei2odom_pose.p - base02odom_pose.p);
+		fit_pts.push_back(Point2d(basei2base0_p(0),basei2base0_p(1)));
+	}
+	{
+		Mat line;
+		cv::fitLine(fit_pts,line, CV_DIST_L2, 0, 0.01, 0.01);
+		double vx, vy, x0, y0;
+		vx = line.at<float>(0, 0);
+		vy = line.at<float>(1, 0);
+		x0 = line.at<float>(2, 0);
+		y0 = line.at<float>(3, 0);
+		double k = vy/vx;
+		//cout << k <<","<< vy <<","<< x0 <<","<< y0 <<endl;
+		coeff << k,-1,y0-k*x0;
+	}
+	//fit line
 	
+// 	Eigen::Quaterniond cam2base_q = camera2base->q;
+// 	Eigen::Vector3d cam2base_p = camera2base->p;
+// 	Eigen::Vector3d base2cam_p = -(cam2base_q.conjugate()*cam2base_p);
+//  	Eigen::Quaterniond world2base0_q = cam2base_q*cam02world_pose.q.conjugate();
+//  	Eigen::Vector3d world2base0_p = cam2base_q*(-(cam02world_pose.q.conjugate()*cam02world_pose.p)) + cam2base_p;
+	ceres::LossFunction* loss_function = NULL;
+
+	vector<cv::Point2f> fit_pts_cam;
+	Eigen::Matrix<double,3,3> e1;e1 << 1,0,0,0,1,0,0,0,0;
+	Eigen::Matrix<double,3,1> e2; e2 << 0,0,1.0;
+	for (++camera_poses_iter;camera_poses_iter != cam_line.end();++camera_poses_iter)
+	{
+		Pose3d world2cami_pose= camera_poses_iter->second;
+		double infomation_scale = 2.0/(world2cami_pose.covariance+cam02world_pose.covariance);
+		const Eigen::Matrix<double, 1, 1> sqrt_information =
+			Eigen::MatrixXd::Identity(1, 1) * infomation_scale;
+		// Ceres will take ownership of the pointer.
+		ceres::CostFunction* cost_function = line_factor::Create(
+			cam02world_pose, world2cami_pose, sqrt_information,e1,e2);
+
+		problem->AddResidualBlock(cost_function, loss_function,
+								camera2base->p.data(),
+								camera2base->q.coeffs().data(), coeff.data());
+		
+		problem->SetParameterization(camera2base->q.coeffs().data(),
+									g_quaternion_local_parameterization);
+
+// 		Eigen::Quaterniond cami2world_q = world2cami_pose.q;
+// 		Eigen::Vector3d cami2world_p = world2cami_pose.p;
+// 		Eigen::Vector3d basei2world_p = cami2world_q * base2cam_p + cami2world_p;
+// 		Eigen::Vector3d basei2base0_p_cam = world2base0_q*basei2world_p + world2base0_p;
+// 		fit_pts_cam.push_back(Point2d(basei2base0_p_cam(0),basei2base0_p_cam(1)));
+	}
+
+//  	Eigen::Quaterniond world2base0_q = cam2base_q*first_cam_pose.q;
+//  	Eigen::Vector3d world2base0_p = cam2base_q*first_cam_pose.p + cam2base_p;
+// 	vector<cv::Point2f> fit_pts_cam;
+// 	for (++camera_poses_iter;camera_poses_iter != cam_line.end();++camera_poses_iter)
+// 	{
+// 		Pose3d world2cami_pose= camera_poses_iter->second;
+// 		Eigen::Quaterniond cami2world_q = world2cami_pose.q.conjugate();
+// 		Eigen::Quaterniond cami2base0_q = world2base0_q*cami2world_q;
+// 		Eigen::Vector3d cami2base0_p = world2base0_q *(-(cami2world_q*world2cami_pose.p)) + world2base0_p;
+// 		Eigen::Vector3d basei2base0_p_cam = cami2base0_q*base2cam_p + cami2base0_p;
+// 		fit_pts_cam.push_back(Point2d(basei2base0_p_cam(0),basei2base0_p_cam(1)));
+// 	}
+// 	{
+// 		Mat line;
+// 		cv::fitLine(fit_pts_cam,line, CV_DIST_L2, 0, 0.01, 0.01);
+// 		double vx, vy, x0, y0;
+// 		vx = line.at<float>(0, 0);
+// 		vy = line.at<float>(1, 0);
+// 		x0 = line.at<float>(2, 0);
+// 		y0 = line.at<float>(3, 0);
+// 		double k = vy/vx;
+// 		cout << k <<","<< vy <<","<< x0 <<","<< y0 <<endl;
+// 	}
+	
+
 }
 void loadFiles(string fileName,vector<double> &data)
 {
@@ -150,8 +247,9 @@ void loadFiles(string fileName,vector<double> &data)
 }
 int main(int argc, char **argv)
 {
-// 	vector<odomData> odom_data;
 	google::InitGoogleLogging(argv[0]);
+
+/*	vector<odomData> odom_data;
 	//CERES_GFLAGS_NAMESPACE::ParseCommandLineFlags(&argc, &argv, true);
 	
 // 	vector<double> odom_data,time_circle_data,imgPts_circle_data,worldPts_circle_data;
@@ -362,12 +460,12 @@ int main(int argc, char **argv)
 // 		cam_circle <<fixed<<setprecision(10)<< w2c_vp[i](0) << '\t' <<w2c_vp[i](1)<< '\t' <<w2c_vp[i](2)<< '\t' << 
 // 		w2c_vq[i].x() << '\t'<<w2c_vq[i].y() << '\t'<<w2c_vq[i].z() << '\t'<<w2c_vq[i].w() << '\t'<< 1.2<<endl;
 // 		base_circle <<fixed<<setprecision(10)<< odom_vp[i](0) << '\t' <<odom_vp[i](1)<< '\t' <<odom_vp[i](2)<< '\t' << 
-// 		odom_vq[i].x() << '\t'<<odom_vq[i].y() << '\t'<<odom_vq[i].z() << '\t'<<odom_vq[i].w() << '\t'<< 0<<endl;
+// 		odom_vq[i].x() << '\t'<<odom_vq[iyaw].y() << '\t'<<odom_vq[i].z() << '\t'<<odom_vq[i].w() << '\t'<< 0<<endl;
 // 	}
 // 	base_circle.close();base_line.close();cam_circle.close();cam_line.close();
-	ceres::Problem problem;
-	ceres::LossFunction *loss_function = NULL;
+	*/
 	/***************************************************************/
+	ceres::Problem problem;
 	Eigen::Isometry3d base2camera;
 	base2camera.setIdentity();
 	base2camera(0, 0) = -0.01213677592071148;
@@ -397,12 +495,14 @@ int main(int argc, char **argv)
 // 	camera2base.q.coeffs()[1] -= 0.1;
 // 	camera2base.q.coeffs()[2] += 0.1;
 // 	camera2base.q.coeffs()[3] -= 0.1;
-// 	camera2base.q.normalize();
+	camera2base.q.normalize();
 	MapOfPoses cam_circle_data,cam_line_data,odom_circle_data,odom_line_data;
-	ceres::examples::readPose3d("data/camera_poses_circle.txt",&cam_circle_data,100);
-	ceres::examples::readPose3d("data/camera_poses_line.txt",&cam_line_data,100);
-	ceres::examples::readPose3d("data/base_poses_circle.txt",&odom_circle_data,100);
-	ceres::examples::readPose3d("data/base_poses_line.txt",&odom_line_data,100);
+	int nm = 200;
+	ceres::examples::readPose3d("data/camera_poses_circle.txt",&cam_circle_data,nm/2);
+	ceres::examples::readPose3d("data/base_poses_circle.txt",&odom_circle_data,nm/2);
+
+	ceres::examples::readPose3d("data/camera_poses_line.txt",&cam_line_data,nm/2);
+	ceres::examples::readPose3d("data/base_poses_line.txt",&odom_line_data,nm/2);
 	for (std::map<int, ceres::examples::Pose3d, std::less<int>,
 		Eigen::aligned_allocator<std::pair<const int, ceres::examples::Pose3d>>>::
 	iterator base_poses_iter = odom_circle_data.begin();
@@ -424,19 +524,24 @@ int main(int argc, char **argv)
 	g_quaternion_local_parameterization = new ceres::EigenQuaternionParameterization;
 
 	/***************************************************************/
-	cout <<camera2base.p<<endl;
-	cout << cam_circle_data.size()<<endl;
+	//cout << cam_circle_data.size()<<endl;
 	Eigen::Quaterniond odomPre_q,odomCur_q,w2cPre_q,w2cCur_q;
 	Eigen::Vector3d odomPre_p,w2cPre_p,odomCur_p,w2cCur_p;
-	bool flag = true;
- 	buildOdomCameraProblem(cam_circle_data, odom_circle_data,
-                                            &camera2base, &k1, &k2, &problem);
-	buildOdomCameraProblem(cam_line_data, odom_line_data,
-                                            &camera2base, &k1, &k2, &problem);
+ 	buildOdomCameraProblem(cam_circle_data, odom_circle_data,&camera2base, &k1, &k2, &problem);
+	buildOdomCameraProblem(cam_line_data, odom_line_data,&camera2base, &k1, &k2, &problem);
 	
-	ceres::examples::readPose3d("data/camera_poses_line.txt",&cam_line,1);
-	ceres::examples::readPose3d("data/base_poses_line.txt",&odom_line,1);
-	buildFitLineProblem(cam_line,odom_line,problem);
+	ceres::examples::readPose3d("data/camera_poses_line.txt",&cam_line,20);
+	ceres::examples::readPose3d("data/base_poses_line.txt",&odom_line,20);
+	for (std::map<int, ceres::examples::Pose3d, std::less<int>,
+		Eigen::aligned_allocator<std::pair<const int, ceres::examples::Pose3d>>>::
+	iterator base_poses_iter = odom_line.begin();
+		base_poses_iter != odom_line.end(); ++base_poses_iter)
+	{
+		ceres::examples::Pose3d base_pose = base_poses_iter->second;
+		base_poses_iter->second.p = base_pose.p*1000;
+	}
+
+	buildFitLineProblem(cam_line,odom_line,&camera2base,&problem);
 	
 	
 	
@@ -444,29 +549,20 @@ int main(int argc, char **argv)
 	options.max_num_iterations = 200;
 	options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
 	options.function_tolerance = 1e-8;
+	
+	cout <<"camera2base_p:"<<endl<<camera2base.p<<endl; cout <<endl;
+	cout <<"camera2base_q:"<<endl<<camera2base.q.x()<<","<<camera2base.q.y()<<","<<camera2base.q.z()<<","<<camera2base.q.w()<<endl; cout <<endl;
 
+	cout <<"k1,k2:"<<endl<< k1<<"," <<k2<<endl;cout <<endl;
+	cout <<"coeff:"<<endl << coeff <<endl;cout <<endl;
 	ceres::Solver::Summary summary;
 	ceres::Solve(options, &problem, &summary);
-	cout <<camera2base.p<<endl; 
-	cout << k1<<"," <<k2<<endl;
+	cout <<"camera2base_p:"<<endl<<camera2base.p<<endl; cout <<endl;
+	cout <<"camera2base_q:"<<endl<<camera2base.q.x()<<","<<camera2base.q.y()<<","<<camera2base.q.z()<<","<<camera2base.q.w()<<endl; cout <<endl;
+	cout <<"k1,k2:"<<endl<< k1<<"," <<k2<<endl;cout <<endl;
+	cout <<"coeff:"<<endl << coeff <<endl;cout <<endl;
 	
+	cout << summary.FullReport()<<endl;
 	
-// 	ceres::Problem problem;
-// 	for (int i = 0; i < bal_problem.num_observations(); ++i) {
-// 	ceres::CostFunction* cost_function =
-// 		reprojectError::Create(
-// 			bal_problem.observations()[2 * i + 0],
-// 			bal_problem.observations()[2 * i + 1]);
-// 	problem.AddResidualBlock(cost_function,
-// 							NULL /* squared loss */,
-// 							bal_problem.mutable_camera_for_observation(i),
-// 							bal_problem.mutable_point_for_observation(i));
-// 	}
-// 	ceres::Solver::Options options;
-// 	options.linear_solver_type = ceres::DENSE_SCHUR;
-// 	options.minimizer_progress_to_stdout = true;
-// 	ceres::Solver::Summary summary;
-// 	ceres::Solve(options, &problem, &summary);
-// 	std::cout << summary.FullReport() << "\n";
 	return 1;
 }
